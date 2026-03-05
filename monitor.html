@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent监控面板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh; /* 改为100vh，填满视口 */
+            margin: 0;
+            padding: 0;
+            color: #333;
+            overflow: hidden; /* 隐藏页面滚动条 */
+        }
+        
+        .container {
+            max-width: 1400px; /* 稍微加宽 */
+            margin: 0 auto;
+            height: 100vh; /* 容器也填满高度 */
+            display: flex;
+            flex-direction: column;
+            padding: 15px; /* 减少内边距 */
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 15px 25px; /* 减少内边距 */
+            margin-bottom: 15px; /* 减少外边距 */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0; /* 防止头部被压缩 */
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header h1::before {
+            content: "🚀";
+            font-size: 32px;
+        }
+        
+        .stats-bar {
+            display: flex;
+            gap: 25px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 10px 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+            min-width: 120px;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4a5568;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #718096;
+            margin-top: 5px;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr; /* 左中右三栏 */
+            gap: 15px; /* 减少间隙 */
+            flex: 1; /* 填充剩余空间 */
+            min-height: 0; /* 重要：允许内容压缩 */
+            overflow: hidden; /* 隐藏溢出 */
+        }
+        
+        .middle-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px; /* 减少间隙 */
+            min-height: 0; /* 重要：允许压缩 */
+            height: 100%; /* 填充父容器高度 */
+        }
+        
+        /* Agent状态卡片 - 占上半部分 */
+        .agent-cards-card {
+            flex: 1; /* 占一半空间 */
+            min-height: 0; /* 允许压缩 */
+        }
+        
+        /* 积分排名卡片 - 占下半部分 */
+        .ranking-card {
+            flex: 1; /* 占一半空间 */
+            min-height: 0; /* 允许压缩 */
+        }
+        
+        /* 卡片内容区域 - 内部滚动 */
+        .timeline-content,
+        .agent-cards-grid,
+        .ranking-table,
+        .events-stream {
+            flex: 1; /* 填充卡片剩余空间 */
+            overflow-y: auto; /* 内部垂直滚动 */
+            min-height: 0; /* 重要：允许压缩 */
+            padding-right: 5px; /* 为滚动条留空间 */
+        }
+        
+        /* 自定义滚动条样式 */
+        .timeline-content::-webkit-scrollbar,
+        .agent-cards-grid::-webkit-scrollbar,
+        .ranking-table::-webkit-scrollbar,
+        .events-stream::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .timeline-content::-webkit-scrollbar-thumb,
+        .agent-cards-grid::-webkit-scrollbar-thumb,
+        .ranking-table::-webkit-scrollbar-thumb,
+        .events-stream::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 15px; /* 减少内边距 */
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* 重要：防止内容溢出 */
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px; /* 减少下边距 */
+            padding-bottom: 10px; /* 减少内边距 */
+            border-bottom: 1px solid #e2e8f0; /* 更细的边框 */
+            flex-shrink: 0; /* 防止头部被压缩 */
+        }
+        
+        .card-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .agent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .agent-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .agent-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .agent-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 15px;
+        }
+        
+        .status-online { background: #48bb78; }
+        .status-busy { background: #ed8936; }
+        .status-offline { background: #e53e3e; }
+        
+        .agent-info {
+            flex: 1;
+        }
+        
+        .agent-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .agent-desc {
+            font-size: 14px;
+            color: #718096;
+        }
+        
+        .agent-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+            color: #4a5568;
+        }
+        
+        /* 新的Agent卡片样式 */
+        .agent-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        
+        .agent-card-item {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s ease;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .agent-card-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e0;
+        }
+        
+        .agent-avatar {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .agent-info {
+            flex: 1;
+            min-width: 0; /* 防止文本溢出 */
+        }
+        
+        .agent-name {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 14px;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .agent-role {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 6px;
+        }
+        
+        .agent-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .agent-status.online {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .agent-status.busy {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .agent-status.offline {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        
+        .resource-chart {
+            height: 200px;
+            background: linear-gradient(135deg, #f6f9fc 0%, #e9f2f9 100%);
+            border-radius: 10px;
+            margin-top: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .chart-bar {
+            position: absolute;
+            bottom: 0;
+            width: 40px;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 5px 5px 0 0;
+            transition: height 0.5s ease;
+        }
+        
+        .chart-label {
+            position: absolute;
+            bottom: -25px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: #718096;
+        }
+        
+        .logs-container {
+            height: 300px;
+            overflow-y: auto;
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .log-item {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .log-time {
+            color: #718096;
+            min-width: 80px;
+        }
+        
+        .log-level {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .level-info { background: #bee3f8; color: #2c5282; }
+        .level-warn { background: #feebc8; color: #c05621; }
+        .level-error { background: #fed7d7; color: #c53030; }
+        
+        .log-message {
+            flex: 1;
+            color: #4a5568;
+        }
+        
+        /* 时间线样式 */
+        .timeline-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .timeline-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            position: relative;
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .timeline-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+        
+        .timeline-desc {
+            font-size: 14px;
+            color: #4a5568;
+        }
+        
+        /* Agent卡片网格样式 */
+        .agent-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        
+        .agent-card {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            border-color: #667eea;
+        }
+        
+        .agent-card-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            margin: 0 auto 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+        }
+        
+        .agent-card-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .agent-card-status {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .status-online { background: #c6f6d5; color: #22543d; }
+        .status-busy { background: #feebc8; color: #744210; }
+        .status-offline { background: #fed7d7; color: #742a2a; }
+        
+        .agent-card-stats {
+            display: flex;
+            justify-content: space-around;
+            font-size: 12px;
+            color: #718096;
+        }
+        
+        /* 积分排名表格样式 */
+        .ranking-table {
+            overflow-x: auto;
+        }
+        
+        .ranking-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .ranking-table th {
+            background: #f7fafc;
+            padding: 10px 12px; /* 减少内边距 */
+            text-align: left;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+            font-size: 13px;
+        }
+        
+        .ranking-table td {
+            padding: 10px 12px; /* 减少内边距 */
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 13px;
+        }
+        
+        .ranking-table tr:hover {
+            background: #f7fafc;
+        }
+        
+        .rank-badge {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        
+        .rank-1 { background: #f6e05e; color: #744210; }
+        .rank-2 { background: #cbd5e0; color: #4a5568; }
+        .rank-3 { background: #ed8936; color: white; }
+        .rank-other { background: #e2e8f0; color: #718096; }
+        
+        .score-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        /* 事件流样式 */
+        .events-stream {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .event-card {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid #48bb78;
+        }
+        
+        .event-card.warning { border-left-color: #ed8936; }
+        .event-card.error { border-left-color: #e53e3e; }
+        
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .event-time {
+            font-size: 12px;
+            color: #718096;
+        }
+        
+        .event-type {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        
+        .type-info { background: #bee3f8; color: #2c5282; }
+        .type-warning { background: #feebc8; color: #c05621; }
+        .type-error { background: #fed7d7; color: #c53030; }
+        
+        .event-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .event-desc {
+            font-size: 14px;
+            color: #4a5568;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 10px 20px; /* 减少上下内边距 */
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 13px;
+            flex-shrink: 0; /* 防止底部被压缩 */
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 1024px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .middle-column {
+                gap: 15px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-bar {
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+            
+            .stat-item {
+                min-width: 100px;
+            }
+            
+            .agent-cards-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Agent监控面板 v1.0</h1>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-value" id="total-agents">7</div>
+                    <div class="stat-label">总Agent</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="online-agents">5</div>
+                    <div class="stat-label">在线</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="total-tasks">12</div>
+                    <div class="stat-label">任务</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <!-- 左侧：活动时间线 -->
+            <div class="card timeline-card">
+                <div class="card-header">
+                    <div class="card-title">⏰ 活动时间线</div>
+                    <div class="update-time" id="timeline-update-time">刚刚更新</div>
+                </div>
+                <div class="timeline-content" id="timeline-content">
+                    <!-- 时间线内容 -->
+                </div>
+            </div>
+            
+            <!-- 中间：Agent状态 + 积分排名 -->
+            <div class="middle-column">
+                <!-- 上半：Agent状态卡片 -->
+                <div class="card agent-cards-card">
+                    <div class="card-header">
+                        <div class="card-title">🤖 Agent状态</div>
+                        <div class="update-time" id="agent-update-time">刚刚更新</div>
+                    </div>
+                    <div class="agent-cards-grid" id="agent-cards">
+                        <!-- Agent独立卡片 -->
+                    </div>
+                </div>
+                
+                <!-- 下半：积分排名 -->
+                <div class="card ranking-card">
+                    <div class="card-header">
+                        <div class="card-title">🏆 积分排名</div>
+                        <div class="update-time" id="ranking-update-time">刚刚更新</div>
+                    </div>
+                    <div class="ranking-table" id="ranking-table">
+                        <!-- 排名表格 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧：实时事件流 -->
+            <div class="card events-card">
+                <div class="card-header">
+                    <div class="card-title">📝 实时事件流</div>
+                    <div class="update-time" id="events-update-time">刚刚更新</div>
+                </div>
+                <div class="events-stream" id="events-stream">
+                    <!-- 事件流卡片 -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>云端的黑猫监控系统 • 数据实时更新 • 最后更新: <span id="last-update">09:40:00</span></p>
+        </div>
+    </div>
+
+    <script>
+        // 模拟数据 - 更新为三栏布局所需数据
+        const agents = [
+            { id: 1, name: '总指挥', status: 'online', role: '任务协调', avatar: '👑', tasks: 3, points: 95, cpu: 45, memory: 320 },
+            { id: 2, name: '笔杆子', status: 'online', role: '内容创作', avatar: '✍️', tasks: 5, points: 88, cpu: 32, memory: 280 },
+            { id: 3, name: '参谋', status: 'busy', role: '深度分析', avatar: '🧠', tasks: 7, points: 92, cpu: 68, memory: 420 },
+            { id: 4, name: '运营官', status: 'online', role: '日程管理', avatar: '📅', tasks: 4, points: 85, cpu: 28, memory: 240 },
+            { id: 5, name: '进化官', status: 'online', role: '代码优化', avatar: '⚡', tasks: 6, points: 90, cpu: 52, memory: 380 },
+            { id: 6, name: '侦察兵', status: 'busy', role: '数据监控', avatar: '🔍', tasks: 8, points: 87, cpu: 75, memory: 460 },
+            { id: 7, name: '守夜人', status: 'offline', role: '系统告警', avatar: '🌙', tasks: 0, points: 78, cpu: 0, memory: 0 }
+        ];
+
+        // 时间线数据
+        const timeline = [
+            { time: '10:30', title: '晨会开始', desc: '全体Agent参加每日晨会' },
+            { time: '10:45', title: '任务分配', desc: '总指挥分配今日重点任务' },
+            { time: '11:00', title: '数据分析', desc: '参谋开始深度数据分析' },
+            { time: '11:30', title: '内容创作', desc: '笔杆子开始撰写报告' },
+            { time: '12:00', title: '午餐休息', desc: '系统进入低功耗模式' },
+            { time: '13:30', title: '代码审查', desc: '进化官进行代码优化' },
+            { time: '14:00', title: '数据同步', desc: '侦察兵更新监控数据' },
+            { time: '15:00', title: '进度汇报', desc: '各Agent汇报工作进展' }
+        ];
+
+        // 积分排名数据
+        const rankings = [
+            { rank: 1, name: '总指挥', points: 95, tasks: 3 },
+            { rank: 2, name: '参谋', points: 92, tasks: 7 },
+            { rank: 3, name: '进化官', points: 90, tasks: 6 },
+            { rank: 4, name: '笔杆子', points: 88, tasks: 5 },
+            { rank: 5, name: '侦察兵', points: 87, tasks: 8 },
+            { rank: 6, name: '运营官', points: 85, tasks: 4 },
+            { rank: 7, name: '守夜人', points: 78, tasks: 0 }
+        ];
+
+        // 实时事件流数据
+        const events = [
+            { time: '10:30', title: '新任务分配', desc: '总指挥将数据分析任务分配给参谋', type: 'info' },
+            { time: '10:35', title: '代码提交', desc: '进化官提交了新的优化代码', type: 'info' },
+            { time: '10:40', title: '报告完成', desc: '笔杆子完成了月度报告', type: 'info' },
+            { time: '10:45', title: '系统警告', desc: '侦察兵检测到异常数据流量', type: 'warning' },
+            { time: '10:50', title: '邮件发送', desc: '运营官发送了3封重要邮件', type: 'info' },
+            { time: '10:55', title: '连接异常', desc: '守夜人连接不稳定，正在重试', type: 'error' },
+            { time: '11:00', title: '数据备份', desc: '系统自动完成数据备份', type: 'info' }
+        ];
+
+        const resources = [
+            { label: 'CPU', value: 65 },
+            { label: '内存', value: 78 },
+            { label: '磁盘', value: 42 },
+            { label: '网络', value: 58 }
+        ];
+
+        // 初始化函数
+        function init() {
+            renderTimeline();
+            renderAgentCards();
+            renderRankings();
+            renderEvents();
+            updateStats();
+            updateTime();
+            
+            // 模拟实时更新
+            setInterval(updateData, 5000);
+        }
+
+        // 渲染时间线
+        function renderTimeline() {
+            const container = document.getElementById('timeline-container');
+            container.innerHTML = '';
+            
+            timeline.forEach(item => {
+                const timelineElement = document.createElement('div');
+                timelineElement.className = 'timeline-item';
+                timelineElement.innerHTML = `
+                    <div class="timeline-time">${item.time}</div>
+                    <div class="timeline-title">${item.title}</div>
+                    <div class="timeline-desc">${item.desc}</div>
+                `;
+                container.appendChild(timelineElement);
+            });
+        }
+
+        // 渲染Agent卡片
+        function renderAgentCards() {
+            const container = document.getElementById('agent-cards-container');
+            container.innerHTML = '';
+            
+            agents.forEach(agent => {
+                const statusText = agent.status === 'online' ? '在线' : 
+                                 agent.status === 'busy' ? '忙碌' : '离线';
+                
+                const agentElement = document.createElement('div');
+                agentElement.className = 'agent-card-item';
+                agentElement.innerHTML = `
+                    <div class="agent-avatar">${agent.avatar}</div>
+                    <div class="agent-info">
+                        <div class="agent-name">${agent.name}</div>
+                        <div class="agent-role">${agent.role}</div>
+                        <div class="agent-status ${agent.status}">${statusText}</div>
+                    </div>
+                    <div class="agent-stats">
+                        <div>任务：${agent.tasks}</div>
+                        <div>积分：${agent.points}</div>
+                    </div>
+                `;
+                container.appendChild(agentElement);
+            });
+        }
+
+        // 渲染积分排名
+        function renderRankings() {
+            const container = document.getElementById('ranking-container');
+            container.innerHTML = '';
+            
+            rankings.forEach(rank => {
+                const rankElement = document.createElement('div');
+                rankElement.className = 'ranking-item';
+                rankElement.innerHTML = `
+                    <div class="rank-number">${rank.rank}</div>
+                    <div class="rank-info">
+                        <div class="rank-name">${rank.name}</div>
+                        <div class="rank-score">任务：${rank.tasks}个</div>
+                    </div>
+                    <div class="rank-points">${rank.points}</div>
+                `;
+                container.appendChild(rankElement);
+            });
+        }
+
+        // 渲染事件流
+        function renderEvents() {
+            const container = document.getElementById('events-container');
+            container.innerHTML = '';
+            
+            events.forEach(event => {
+                const eventElement = document.createElement('div');
+                eventElement.className = 'event-card-item';
+                eventElement.innerHTML = `
+                    <div class="event-time">${event.time}</div>
+                    <div class="event-content">
+                        <div class="event-title">${event.title}</div>
+                        <div class="event-desc">${event.desc}</div>
+                    </div>
+                `;
+                container.appendChild(eventElement);
+            });
+        }
+
+        // 移除不再使用的函数
+
+        // 更新统计数据
+        function updateStats() {
+            const onlineCount = agents.filter(a => a.status === 'online').length;
+            const busyCount = agents.filter(a => a.status === 'busy').length;
+            const totalTasks = agents.reduce((sum, agent) => sum + agent.tasks, 0);
+            const totalPoints = agents.reduce((sum, agent) => sum + agent.points, 0);
+            
+            document.getElementById('total-agents').textContent = agents.length;
+            document.getElementById('online-agents').textContent = onlineCount;
+            document.getElementById('total-tasks').textContent = totalTasks;
+        }
+
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-CN', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            document.getElementById('last-update').textContent = timeStr;
+            document.querySelectorAll('.update-time').forEach(el => {
+                el.textContent = `${Math.floor(Math.random() * 2) + 1}分钟前`;
+            });
+        }
+
+        // 模拟数据更新
+        function updateData() {
+            // 随机更新一个Agent的状态
+            const randomIndex = Math.floor(Math.random() * agents.length);
+            const agent = agents[randomIndex];
+            
+            if (agent.status !== 'offline') {
+                // 随机更新任务和积分
+                agent.tasks = Math.max(0, agent.tasks + (Math.random() > 0.5 ? 1 : -1));
+                agent.points = Math.min(100, Math.max(50, agent.points + (Math.random() * 4 - 2)));
+                
+                // 更新CPU和内存
+                agent.cpu = Math.min(100, Math.max(10, agent.cpu + (Math.random() * 20 - 10)));
+                agent.memory = Math.min(512, Math.max(200, agent.memory + (Math.random() * 50 - 25)));
+            }
+            
+            // 添加新事件
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('zh-CN', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const eventTypes = ['info', 'info', 'warning'];
+            const eventTitles = [
+                '新任务完成',
+                '状态更新',
+                '系统通知',
+                '数据同步',
+                '进度汇报'
+            ];
+            const eventDescs = [
+                `${agent.name} 完成了新的任务`,
+                `${agent.name} 状态已更新`,
+                `系统自动检查完成`,
+                `数据同步任务正在进行`,
+                `${agent.name} 提交了进度报告`
+            ];
+            
+            events.unshift({
+                time: timeStr,
+                title: eventTitles[Math.floor(Math.random() * eventTitles.length)],
+                desc: eventDescs[Math.floor(Math.random() * eventDescs.length)],
+                type: eventTypes[Math.floor(Math.random() * eventTypes.length)]
+            });
+            
+            // 保持事件数量
+            if (events.length > 15) events.pop();
+            
+            // 更新排名数据
+            rankings.sort((a, b) => b.points - a.points);
+            rankings.forEach((rank, index) => {
+                rank.rank = index + 1;
+            });
+            
+            // 更新资源数据
+            resources.forEach(resource => {
+                resource.value = Math.min(100, Math.max(20, resource.value + (Math.random() * 10 - 5)));
+            });
+            
+            // 重新渲染所有组件
+            renderAgentCards();
+            renderRankings();
+            renderEvents();
+            updateStats();
+            updateTime();
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
